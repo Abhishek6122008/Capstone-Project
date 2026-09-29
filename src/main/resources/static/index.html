@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task Manager</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --text:#1f2328; --muted:#656d76; --accent:#2563eb; --danger:#dc2626; --line:#d8dee4; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0d1117; --card:#161b22; --text:#e6edf3; --muted:#8d96a0; --line:#30363d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:var(--card); border-bottom:1px solid var(--line); }
+  h1 { font-size:1.25rem; margin:0; }
+  main { max-width:720px; margin:24px auto; padding:0 16px; }
+  form.add { display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-bottom:16px; }
+  @media (max-width:600px) { form.add { grid-template-columns:1fr; } }
+  input, button { font:inherit; padding:8px 12px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--text); }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.danger { color:var(--danger); }
+  ul { list-style:none; padding:0; margin:0; }
+  li { display:flex; gap:12px; align-items:center; padding:12px; margin-bottom:8px; background:var(--card); border:1px solid var(--line); border-radius:8px; }
+  li .body { flex:1; min-width:0; overflow-wrap:anywhere; }
+  li.done .title { text-decoration:line-through; color:var(--muted); }
+  .desc { color:var(--muted); font-size:.9rem; }
+  #error { color:var(--danger); min-height:1.5em; }
+  .empty { color:var(--muted); text-align:center; padding:24px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Task Manager</h1>
+  <button id="logout">Log out</button>
+</header>
+<main>
+  <form class="add" id="add">
+    <input name="title" placeholder="Task title" required maxlength="100" aria-label="Task title">
+    <input name="description" placeholder="Description (optional)" maxlength="500" aria-label="Description">
+    <button class="primary">Add</button>
+  </form>
+  <p id="error" role="alert"></p>
+  <ul id="list"></ul>
+</main>
+<script>
+  const list = document.getElementById('list');
+  const errorBox = document.getElementById('error');
+
+  // Spring Security puts the CSRF token in this cookie; state-changing requests must send it back
+  const csrf = () => document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '';
+
+  async function api(method, url, body) {
+    const res = await fetch(url, {
+      method,
+      // X-Requested-With makes Spring answer 401 instead of triggering the browser's Basic-auth popup
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-XSRF-TOKEN': decodeURIComponent(csrf()) },
+      body: body && JSON.stringify(body),
+    });
+    // Session expired -> Spring redirects to the login page
+    if (res.redirected || res.status === 401) { location.href = '/login'; return; }
+    if (!res.ok) {
+      const problem = await res.json().catch(() => ({}));
+      throw new Error(problem.detail || `Request failed (${res.status})`);
+    }
+    return res.status === 204 ? null : res.json();
+  }
+
+  async function run(fn) {
+    errorBox.textContent = '';
+    try { await fn(); await render(); } catch (e) { errorBox.textContent = e.message; }
+  }
+
+  async function render() {
+    const tasks = await api('GET', '/api/tasks');
+    if (!tasks) return;
+    list.replaceChildren(...tasks.map(taskItem));
+    if (!tasks.length) list.innerHTML = '<li class="empty">No tasks yet. Add one above.</li>';
+  }
+
+  function taskItem(t) {
+    const li = document.createElement('li');
+    li.className = t.done ? 'done' : '';
+
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = t.done;
+    box.setAttribute('aria-label', 'Mark done');
+    box.onchange = () => run(() => api('PUT', `/api/tasks/${t.id}`, { ...t, done: box.checked }));
+
+    // textContent, not innerHTML, so task text can't inject HTML
+    const body = document.createElement('div');
+    body.className = 'body';
+    const title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = t.title;
+    const desc = document.createElement('div');
+    desc.className = 'desc';
+    desc.textContent = t.description || '';
+    body.append(title, desc);
+
+    const edit = document.createElement('button');
+    edit.textContent = 'Edit';
+    edit.onclick = () => {
+      const newTitle = prompt('Title', t.title);
+      if (newTitle === null) return;
+      const newDesc = prompt('Description', t.description || '');
+      run(() => api('PUT', `/api/tasks/${t.id}`, { title: newTitle, description: newDesc ?? t.description, done: t.done }));
+    };
+
+    const del = document.createElement('button');
+    del.textContent = 'Delete';
+    del.className = 'danger';
+    del.onclick = () => confirm(`Delete "${t.title}"?`) && run(() => api('DELETE', `/api/tasks/${t.id}`));
+
+    li.append(box, body, edit, del);
+    return li;
+  }
+
+  document.getElementById('add').onsubmit = e => {
+    e.preventDefault();
+    const form = e.target;
+    run(async () => {
+      await api('POST', '/api/tasks', { title: form.title.value, description: form.description.value, done: false });
+      form.reset();
+    });
+  };
+
+  document.getElementById('logout').onclick = async () => {
+    await fetch('/logout', { method: 'POST', headers: { 'X-XSRF-TOKEN': decodeURIComponent(csrf()) } });
+    location.href = '/login?logout';
+  };
+
+  run(() => {});
+</script>
+</body>
+</html>
