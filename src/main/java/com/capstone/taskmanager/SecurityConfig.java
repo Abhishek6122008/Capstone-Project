@@ -20,6 +20,8 @@ public class SecurityConfig {
 	SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 		http
 				.authorizeHttpRequests(auth -> auth
+						// Health endpoint stays public for Docker healthcheck / K8s probes
+						.requestMatchers("/actuator/health/**").permitAll()
 						.anyRequest().authenticated())
 				// Browser users get Spring's built-in login page at /login
 				.formLogin(Customizer.withDefaults())
