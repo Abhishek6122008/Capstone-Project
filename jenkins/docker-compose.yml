@@ -1,0 +1,17 @@
+# Run on the Linux box:
+#   cd jenkins && DOCKER_GID=$(getent group docker | cut -d: -f3) docker compose up -d --build
+services:
+  jenkins:
+    build: .
+    ports:
+      - "8081:8080"     # Jenkins UI on :8081 so the app can keep :8080
+      - "50000:50000"   # inbound agents
+    volumes:
+      - jenkins_home:/var/jenkins_home              # jobs, credentials, build history
+      - /var/run/docker.sock:/var/run/docker.sock   # lets pipelines run "docker build/push"
+    group_add:
+      - "${DOCKER_GID:-999}"   # host docker group, so the jenkins user may use the socket
+    restart: unless-stopped
+
+volumes:
+  jenkins_home:
