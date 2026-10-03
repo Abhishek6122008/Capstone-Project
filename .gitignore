@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Kubernetes secrets (generated from this file, never committed) ###
+k8s/secret.env

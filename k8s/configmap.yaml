@@ -1,0 +1,8 @@
+# Non-secret settings, injected into containers as env vars (see envFrom in the Deployments)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: taskmanager-config
+data:
+  DB_URL: jdbc:postgresql://postgres:5432/taskdb   # "postgres" = the PostgreSQL Service name
+  POSTGRES_DB: taskdb
