@@ -1,0 +1,9 @@
+# Keep the build context small: only pom, wrapper and src are needed
+target/
+.git/
+.idea/
+.vscode/
+k8s/
+ansible/
+jenkins/
+*.md
