@@ -1,0 +1,54 @@
+# Builds the app image inside Minikube and deploys the k8s/ manifests.
+# Passwords are prompted at run time (or passed with -e), never stored in the repo.
+#   ansible-playbook deploy.yml
+#   ansible-playbook deploy.yml -e db_password=... -e admin_password=...
+- name: Deploy Task Manager to Kubernetes
+  hosts: k8s
+  vars_prompt:
+    - name: db_password
+      prompt: Database password
+      private: true
+    - name: admin_password
+      prompt: App admin password
+      private: true
+
+  tasks:
+    - name: Write k8s/secret.env (gitignored) for the kustomize Secret generator
+      ansible.builtin.copy:
+        dest: "{{ repo_dir }}/k8s/secret.env"
+        mode: "0600"
+        content: |
+          DB_USERNAME={{ db_username }}
+          DB_PASSWORD={{ db_password }}
+          ADMIN_USERNAME={{ admin_username }}
+          ADMIN_PASSWORD={{ admin_password }}
+      no_log: true   # keep passwords out of the Ansible output
+
+    - name: List images already inside Minikube
+      ansible.builtin.command: sg docker -c "minikube image ls"
+      register: minikube_images
+      changed_when: false
+
+    # Builds straight into Minikube's container runtime, so no registry is needed
+    - name: Build the app image inside Minikube
+      ansible.builtin.command: >-
+        sg docker -c "minikube image build -t {{ app_image }}:{{ app_version }} {{ repo_dir }}"
+      when: (app_image ~ ':' ~ app_version) not in minikube_images.stdout
+
+    - name: Apply the Kubernetes manifests
+      ansible.builtin.command: kubectl apply -k {{ repo_dir }}/k8s
+      register: apply
+      changed_when: "' created' in apply.stdout or ' configured' in apply.stdout"
+
+    - name: Wait for the app rollout to finish
+      ansible.builtin.command: kubectl -n {{ namespace }} rollout status deployment/taskmanager --timeout=300s
+      changed_when: false
+
+    - name: Get the app URL
+      ansible.builtin.command: sg docker -c "minikube service taskmanager -n {{ namespace }} --url"
+      register: app_url
+      changed_when: false
+
+    - name: Done
+      ansible.builtin.debug:
+        msg: "Task Manager is running at {{ app_url.stdout }} (login: {{ admin_username }})"

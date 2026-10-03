@@ -1,0 +1,6 @@
+# Whole setup from a bare Ubuntu/Debian box to a running app:
+#   cd ansible && ansible-playbook site.yml -K
+- import_playbook: docker.yml
+- import_playbook: config.yml
+- import_playbook: kubernetes.yml
+- import_playbook: deploy.yml
