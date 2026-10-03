@@ -1,0 +1,33 @@
+# App + PostgreSQL, fully containerised:  docker compose up -d --build
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: taskdb
+      POSTGRES_USER: ${DB_USERNAME:-taskuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-taskpass}
+    volumes:
+      - db-data:/var/lib/postgresql/data   # data survives "docker compose down"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    image: abhishek6122008/taskmanager:local
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/taskdb   # "db" = service name on the compose network
+      DB_USERNAME: ${DB_USERNAME:-taskuser}
+      DB_PASSWORD: ${DB_PASSWORD:-taskpass}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+    depends_on:
+      db:
+        condition: service_healthy   # wait until Postgres accepts connections
+    restart: unless-stopped
+
+volumes:
+  db-data:
