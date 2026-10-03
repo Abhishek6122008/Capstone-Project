@@ -1,0 +1,62 @@
+# Installs Docker Engine from Docker's official apt repo (Ubuntu/Debian)
+# and lets the target user run docker without sudo.
+#   ansible-playbook docker.yml -K
+- name: Install Docker
+  hosts: k8s
+  become: true
+  tasks:
+    - name: Check whether Docker is already installed
+      ansible.builtin.command: docker --version
+      register: docker_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Docker Engine
+      when: docker_check.rc != 0   # skip on machines that already have Docker
+      block:
+        - name: Install prerequisites
+          ansible.builtin.apt:
+            name: [ca-certificates, curl]
+            update_cache: true
+
+        - name: Create the apt keyrings directory
+          ansible.builtin.file:
+            path: /etc/apt/keyrings
+            state: directory
+            mode: "0755"
+
+        - name: Add Docker's GPG key
+          ansible.builtin.get_url:
+            url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+            dest: /etc/apt/keyrings/docker.asc
+            mode: "0644"
+
+        - name: Add Docker's apt repository
+          ansible.builtin.apt_repository:
+            repo: >-
+              deb [arch={{ k8s_arch }} signed-by=/etc/apt/keyrings/docker.asc]
+              https://download.docker.com/linux/{{ ansible_distribution | lower }}
+              {{ ansible_distribution_release }} stable
+            filename: docker
+
+        - name: Install Docker packages
+          ansible.builtin.apt:
+            name:
+              - docker-ce
+              - docker-ce-cli
+              - containerd.io
+              - docker-buildx-plugin
+              - docker-compose-plugin
+            update_cache: true
+
+    - name: Make sure Docker is running and starts on boot
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Let the target user run docker without sudo
+      ansible.builtin.user:
+        name: "{{ target_user }}"
+        groups: docker
+        append: true
