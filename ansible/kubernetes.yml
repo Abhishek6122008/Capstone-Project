@@ -1,0 +1,50 @@
+# Installs kubectl + Minikube and starts a single-node Kubernetes cluster on Docker.
+#   ansible-playbook kubernetes.yml -K
+- name: Install Kubernetes (Minikube)
+  hosts: k8s
+  tasks:
+    - name: Install kubectl (latest stable)
+      become: true
+      ansible.builtin.get_url:
+        url: "https://dl.k8s.io/release/{{ lookup('url', 'https://dl.k8s.io/release/stable.txt') }}/bin/linux/{{ k8s_arch }}/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: "0755"
+
+    - name: Install Minikube
+      become: true
+      ansible.builtin.get_url:
+        url: "https://storage.googleapis.com/minikube/releases/latest/minikube-linux-{{ k8s_arch }}"
+        dest: /usr/local/bin/minikube
+        mode: "0755"
+
+    # minikube commands run as the target user via "sg docker", so they work
+    # even if docker.yml only just added the user to the docker group.
+    - name: Check whether Minikube is running
+      ansible.builtin.command: sg docker -c "minikube status"
+      register: minikube_status
+      changed_when: false
+      failed_when: false
+
+    - name: Start Minikube
+      ansible.builtin.command: >-
+        sg docker -c "minikube start --driver=docker
+        --cpus={{ minikube_cpus }} --memory={{ minikube_memory }}"
+      when: minikube_status.rc != 0
+
+    - name: List Minikube addons
+      ansible.builtin.command: sg docker -c "minikube addons list -o json"
+      register: minikube_addons
+      changed_when: false
+
+    - name: Enable metrics-server (the HPA needs CPU metrics)
+      ansible.builtin.command: sg docker -c "minikube addons enable metrics-server"
+      when: (minikube_addons.stdout | from_json)['metrics-server'].Status != 'enabled'
+
+    - name: Show cluster nodes
+      ansible.builtin.command: kubectl get nodes -o wide
+      register: nodes
+      changed_when: false
+
+    - name: Cluster is ready
+      ansible.builtin.debug:
+        var: nodes.stdout_lines

@@ -6,3 +6,7 @@ target_user: "{{ ansible_user | default(lookup('env', 'USER')) }}"
 
 # Docker/kubectl/minikube download names use amd64/arm64
 k8s_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_architecture] }}"
+
+# Minikube cluster size (Minikube's own defaults are 2 CPUs / 2 GB)
+minikube_cpus: 2
+minikube_memory: 4096   # MB
