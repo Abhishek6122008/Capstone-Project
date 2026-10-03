@@ -1,0 +1,15 @@
+# Deploy everything with:  kubectl apply -k k8s/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: taskmanager
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+
+# Builds the Secret from k8s/secret.env, which is gitignored so passwords never reach GitHub.
+# The name gets a content hash, so changing a password triggers a rolling restart automatically.
+secretGenerator:
+  - name: taskmanager-secret
+    envs:
+      - secret.env
