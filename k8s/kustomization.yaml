@@ -8,6 +8,13 @@ resources:
   - configmap.yaml
   - postgres-storage.yaml
   - postgres.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Image tag lives here, so a release is a one-line change
+images:
+  - name: docker.io/abhishek6122008/taskmanager
+    newTag: "1.0"
 
 # Builds the Secret from k8s/secret.env, which is gitignored so passwords never reach GitHub.
 # The name gets a content hash, so changing a password triggers a rolling restart automatically.
