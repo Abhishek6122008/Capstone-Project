@@ -6,6 +6,8 @@ namespace: taskmanager
 resources:
   - namespace.yaml
   - configmap.yaml
+  - postgres-storage.yaml
+  - postgres.yaml
 
 # Builds the Secret from k8s/secret.env, which is gitignored so passwords never reach GitHub.
 # The name gets a content hash, so changing a password triggers a rolling restart automatically.

@@ -1,0 +1,27 @@
+# PersistentVolume: 1Gi on the Minikube node's disk (/data survives Minikube restarts)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: taskmanager-postgres-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain   # keep the data even if the claim is deleted
+  storageClassName: manual
+  hostPath:
+    path: /data/taskmanager-postgres
+---
+# PersistentVolumeClaim: what the Postgres pod asks for; binds to the PV above
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: manual
+  resources:
+    requests:
+      storage: 1Gi
