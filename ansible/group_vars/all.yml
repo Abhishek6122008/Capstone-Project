@@ -10,3 +10,10 @@ k8s_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_architecture] }}"
 # Minikube cluster size (Minikube's own defaults are 2 CPUs / 2 GB)
 minikube_cpus: 2
 minikube_memory: 4096   # MB
+
+# App deployment. Keep app_version equal to newTag in k8s/kustomization.yaml.
+namespace: taskmanager
+app_image: docker.io/abhishek6122008/taskmanager
+app_version: "1.0"
+db_username: taskuser
+admin_username: admin
