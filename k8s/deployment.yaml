@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskmanager
+  labels:
+    app: taskmanager
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5          # old ReplicaSets kept for "kubectl rollout undo"
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1                  # start 1 new pod at a time...
+      maxUnavailable: 0            # ...and never drop below the desired count (zero downtime)
+  selector:
+    matchLabels:
+      app: taskmanager
+  template:
+    metadata:
+      labels:
+        app: taskmanager
+    spec:
+      automountServiceAccountToken: false   # the app never talks to the Kubernetes API
+      initContainers:
+        # Wait for PostgreSQL so the app doesn't crash-loop on first deploy
+        - name: wait-for-db
+          image: postgres:17-alpine
+          command: ["sh", "-c", "until pg_isready -h postgres -p 5432; do echo waiting for db; sleep 2; done"]
+      containers:
+        - name: app
+          image: docker.io/abhishek6122008/taskmanager   # tag is set in kustomization.yaml
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: taskmanager-config     # DB_URL
+            - secretRef:
+                name: taskmanager-secret     # DB_USERNAME/PASSWORD, ADMIN_USERNAME/PASSWORD
+          # Spring Boot exposes these via management.endpoint.health.probes.enabled=true
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 30         # up to 150s for the JVM to start
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            periodSeconds: 5
+          resources:
+            requests:                    # HPA computes CPU % against this request
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp              # Tomcat needs a writable temp dir
+      volumes:
+        - name: tmp
+          emptyDir: {}
