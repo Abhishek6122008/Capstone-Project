@@ -1,0 +1,36 @@
+# Configuration management: keeps the Kubernetes host in a known state.
+# Idempotent, so re-running it only changes what has drifted.
+#   ansible-playbook config.yml -K
+- name: Configure the Kubernetes host
+  hosts: k8s
+  become: true
+  tasks:
+    - name: Install base tools
+      ansible.builtin.apt:
+        name: [git, curl, jq, conntrack, bash-completion]
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Raise inotify limits (pods watching files exhaust the low defaults)
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-kubernetes.conf
+        mode: "0644"
+        content: |
+          # Managed by Ansible (ansible/config.yml)
+          fs.inotify.max_user_watches = 524288
+          fs.inotify.max_user_instances = 512
+      notify: Reload sysctl
+
+    - name: Add kubectl completion and the "k" alias for the target user
+      ansible.builtin.blockinfile:
+        path: "~{{ target_user }}/.bashrc"
+        marker: "# {mark} kubectl (managed by Ansible)"
+        block: |
+          source <(kubectl completion bash)
+          alias k=kubectl
+          complete -o default -F __start_kubectl k
+
+  handlers:
+    - name: Reload sysctl
+      ansible.builtin.command: sysctl --system
+      changed_when: true
